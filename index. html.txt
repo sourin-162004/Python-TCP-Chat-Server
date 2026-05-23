@@ -33,8 +33,8 @@
         <div class="sidebar">
             <h2>Live Users</h2>
             <ul class="user-list">
-                <li><div class="status-dot"></div> You</li>
-                <li><div class="status-dot"></div> Friend</li>
+                <li id="my-sidebar-name"><div class="status-dot"></div> You</li>
+                <li id="friend-sidebar-name"><div class="status-dot" style="background: #ccc; box-shadow: none;"></div> Waiting...</li>
             </ul>
         </div>
         <div class="chat-main">
@@ -48,7 +48,16 @@
     </div>
 
     <script>
-        const socket = new WebSocket("ws://127.0.0.1:5557");
+        // 1. Popup prompt for your name when the page loads
+        let myName = prompt("Welcome to the chat! Please enter your username:", "Student");
+        if (!myName || myName.trim() === "") {
+            myName = "Anonymous"; 
+        }
+
+        // 2. Update the sidebar instantly with your new name
+        document.getElementById("my-sidebar-name").innerHTML = "<div class='status-dot'></div> " + myName + " (You)";
+
+        const socket = new WebSocket("ws://127.0.0.1:5557"); 
         const chatBox = document.getElementById("chat-box");
         const msgInput = document.getElementById("message-input");
 
@@ -60,19 +69,44 @@
         });
 
         socket.onopen = function(event) {
-            chatBox.innerHTML += "<div class='message system-msg'>Successfully connected to the server!</div>";
+            chatBox.innerHTML += "<div class='message system-msg'>Successfully connected as <b>" + myName + "</b>!</div>";
         };
 
         socket.onmessage = function(event) {
-            chatBox.innerHTML += "<div class='message friend-msg'><b>Friend</b>" + event.data + "</div>";
+            const rawData = event.data;
+            
+            if (rawData.startsWith("SERVER_ADMIN:")) {
+                const actualMessage = rawData.replace("SERVER_ADMIN:", "");
+                chatBox.innerHTML += "<div class='message system-msg' style='background: #ffeeba; color: #856404;'><b>[Admin Announcement]:</b> " + actualMessage + "</div>";
+                chatBox.scrollTop = chatBox.scrollHeight; 
+                return; 
+            }
+
+            let senderName = "Unknown";
+            let messageText = rawData;
+
+            // 3. Separate the friend's name from their message
+            if (rawData.includes("|||")) {
+                let parts = rawData.split("|||");
+                senderName = parts[0]; 
+                messageText = parts[1]; 
+
+                // 4. Update the sidebar with your friend's name!
+                document.getElementById("friend-sidebar-name").innerHTML = "<div class='status-dot'></div> " + senderName;
+            } else {
+                messageText = rawData; 
+            }
+
+            chatBox.innerHTML += "<div class='message friend-msg'><b>" + senderName + "</b>" + messageText + "</div>";
             chatBox.scrollTop = chatBox.scrollHeight; 
         };
 
         function sendMessage() {
-            if (msgInput.value.trim() !== "") {
-                socket.send(msgInput.value);
-                chatBox.innerHTML += "<div class='message my-msg'><b>You</b>" + msgInput.value + "</div>";
-                msgInput.value = "";
+            const text = msgInput.value.trim();
+            if (text !== "") {
+                socket.send(myName + "|||" + text);
+                chatBox.innerHTML += "<div class='message my-msg'><b>" + myName + " (You)</b>" + text + "</div>";
+                msgInput.value = ""; 
                 chatBox.scrollTop = chatBox.scrollHeight; 
             }
         }
